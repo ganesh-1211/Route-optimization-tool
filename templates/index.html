@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Optimization tool</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            margin-top: 30px;
+            margin-bottom: 30px;
+        }
+        #map {
+            height: 500px;
+            margin-top: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .form-card {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+        .result-card {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            border-radius: 5px;
+        }
+        .visualization-options {
+            margin-top: 10px;
+        }
+        .traffic-light {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .traffic-low {
+            background-color: #4CAF50;
+        }
+        .traffic-moderate {
+            background-color: #FFC107;
+        }
+        .traffic-high {
+            background-color: #FF5722;
+        }
+        .traffic-severe {
+            background-color: #F44336;
+        }
+        .legend {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            margin-top: 10px;
+        }
+        .legend-item {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Route Optimization tool</h1>
+        
+        {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+        {% endif %}
+        
+        <div class="card form-card p-4 mb-4">
+            <form id="routeForm" method="post" action="/route">
+                <div class="mb-3">
+                    <label for="source" class="form-label">Source Address</label>
+                    <input name="source" type="text" id="source" class="form-control" placeholder="Enter source address" required value="{{ route_info.source if route_info else '' }}">
+                </div>
+                <div class="mb-3">
+                    <label for="destination" class="form-label">Destination Address</label>
+                    <input name="destination" type="text" id="destination" class="form-control" placeholder="Enter destination address" required value="{{ route_info.destination if route_info else '' }}">
+                </div>
+                <div class="mb-3">
+                    <label for="departureTime" class="form-label">Departure Time (Optional)</label>
+                    <input name="departureTime" type="datetime-local" id="departureTime" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="trafficOption" name="traffic" checked>
+                        <label class="form-check-label" for="trafficOption">
+                            Include Traffic Information
+                        </label>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <button type="submit" class="btn btn-primary">Calculate Route</button>
+                    {% if route_info %}
+                    <div class="visualization-options">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="mapType" id="mapStandard" value="standard" checked onclick="changeMapType('standard')">
+                            <label class="form-check-label" for="mapStandard">Standard</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="mapType" id="mapSatellite" value="satellite" onclick="changeMapType('satellite')">
+                            <label class="form-check-label" for="mapSatellite">Satellite</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="mapType" id="mapTerrain" value="terrain" onclick="changeMapType('terrain')">
+                            <label class="form-check-label" for="mapTerrain">Terrain</label>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        {% if route_info %}
+        <div id="result" class="card result-card p-4 mb-4">
+            <h5>Route Details</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Source:</strong> {{ route_info.source }}</p>
+                    <p><strong>Destination:</strong> {{ route_info.destination }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Distance:</strong> {{ route_info.distance_km }} km</p>
+                    <p><strong>Estimated Time:</strong> {{ route_info.eta }} hours</p>
+                    {% if route_info.has_traffic %}
+                    <p><strong>Traffic Delay:</strong> <span class="text-danger">+{{ route_info.traffic_delay_minutes }} minutes</span></p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if route_info.traffic_enabled %}
+            <div class="legend mt-3">
+                <h6>Traffic Legend</h6>
+                <div class="row">
+                    <div class="col-md-3 legend-item">
+                        <span class="traffic-light traffic-low"></span> Low Traffic
+                    </div>
+                    <div class="col-md-3 legend-item">
+                        <span class="traffic-light traffic-moderate"></span> Moderate Traffic
+                    </div>
+                    <div class="col-md-3 legend-item">
+                        <span class="traffic-light traffic-high"></span> High Traffic
+                    </div>
+                    <div class="col-md-3 legend-item">
+                        <span class="traffic-light traffic-severe"></span> Severe Traffic
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map;
+        var routeLayer;
+        var currentMapType = 'standard';
+        var tileLayerOptions = {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        };
+        
+        var mapLayers = {
+            'standard': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', tileLayerOptions),
+            'satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            }),
+            'terrain': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+            })
+        };
+
+        // Set default value of departure time to current time
+        document.addEventListener('DOMContentLoaded', function() {
+            var now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('departureTime').value = now.toISOString().slice(0,16);
+        });
+
+        function getTrafficColor(intensity) {
+            switch(intensity) {
+                case 'low':
+                    return '#4CAF50';
+                case 'moderate':
+                    return '#FFC107';
+                case 'high':
+                    return '#FF5722';
+                case 'severe':
+                    return '#F44336';
+                default:
+                    return '#0066CC';
+            }
+        }
+
+        function initMap() {
+            // Initialize map
+            map = L.map('map').setView([20.5937, 78.9629], 5); // Default center (India)
+            
+            // Add the standard tile layer initially
+            mapLayers.standard.addTo(map);
+            
+            {% if route_info %}
+                // Parse route points
+                var routePoints = {{ route_info.route_points|safe }};
+                
+                // Source and destination markers
+                var sourceCoords = [{{ route_info.source_coords.lat }}, {{ route_info.source_coords.lng }}];
+                var destCoords = [{{ route_info.dest_coords.lat }}, {{ route_info.dest_coords.lng }}];
+                
+                // Add source marker
+                var sourceMarker = L.marker(sourceCoords).addTo(map)
+                    .bindPopup("Source: {{ route_info.source }}")
+                    .openPopup();
+                
+                // Add destination marker
+                var destMarker = L.marker(destCoords).addTo(map)
+                    .bindPopup("Destination: {{ route_info.destination }}");
+                
+                // Create polyline for route
+                routeLayer = L.polyline(routePoints, {
+                    color: '{{ route_info.has_traffic and "#0066CC" or "#3388ff" }}',
+                    weight: 5,
+                    opacity: 0.7,
+                    lineJoin: 'round'
+                }).addTo(map);
+                
+                {% if route_info.has_traffic %}
+                    // Traffic segments
+                    var trafficSegments = {{ route_info.traffic_segments|safe }};
+                    
+                    // Add traffic indicators at specific points
+                    for (var i = 0; i < trafficSegments.length; i++) {
+                        var segment = trafficSegments[i];
+                        var intensity = segment.intensity;
+                        var point = segment.point;
+                        
+                        // Add traffic icon
+                        var icon = L.divIcon({
+                            className: 'traffic-icon',
+                            html: '<div style="width:12px;height:12px;background-color:' + getTrafficColor(intensity) + ';border-radius:50%;border:2px solid white;"></div>',
+                            iconSize: [12, 12]
+                        });
+                        
+                        L.marker(point, {
+                            icon: icon
+                        }).addTo(map).bindPopup("Traffic: " + intensity.charAt(0).toUpperCase() + intensity.slice(1));
+                    }
+                {% endif %}
+                
+                // Create bounds to fit both markers and route
+                var bounds = L.latLngBounds(routePoints);
+                map.fitBounds(bounds, { padding: [30, 30] });
+                
+                // Add distance and ETA to the popups
+                var popupContent = "Destination: {{ route_info.destination }}<br>" +
+                                  "Distance: {{ route_info.distance_km }} km<br>" + 
+                                  "ETA: {{ route_info.eta_minutes }} minutes";
+                
+                {% if route_info.has_traffic %}
+                    popupContent += "<br>Traffic Delay: +{{ route_info.traffic_delay_minutes }} minutes";
+                {% endif %}
+                
+                destMarker.setPopupContent(popupContent);
+            {% endif %}
+        }
+        
+        function changeMapType(type) {
+            if (map && mapLayers[type] && type !== currentMapType) {
+                // Remove current layer
+                map.removeLayer(mapLayers[currentMapType]);
+                
+                // Add new layer
+                mapLayers[type].addTo(map);
+                
+                // Update current type
+                currentMapType = type;
+            }
+        }
+        
+        // Initialize map when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+        });
+    </script>
+</body>
+</html>
